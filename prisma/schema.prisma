@@ -1,0 +1,111 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  REQUESTER
+  APPROVER
+  ADMIN
+}
+
+enum RequestStatus {
+  PENDING
+  REJECTED
+  AUTO_TERMINATED
+  PAID_CONFIRMED
+}
+
+model User {
+  id                 String              @id @default(cuid())
+  name               String
+  email              String              @unique
+  passwordHash       String
+  role               Role                @default(REQUESTER)
+  assignedStageId    String?
+  assignedStage      StageConfig?        @relation("StageApproverAssignment", fields: [assignedStageId], references: [id])
+  isActive           Boolean             @default(true)
+  createdByAdminId   String?
+  createdByAdmin     User?               @relation("AdminCreatedUsers", fields: [createdByAdminId], references: [id])
+  createdUsers       User[]              @relation("AdminCreatedUsers")
+  requests           Request[]           @relation("RequestCreator")
+  passwordResetTokens PasswordResetToken[]
+  approvalEvents     ApprovalEvent[]     @relation("ApprovalActor")
+  assignedStages     StageConfig[]       @relation("StageApprover")
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+
+  @@map("users")
+}
+
+model Request {
+  id                 String          @id @default(cuid())
+  itemDescription    String
+  vendors            VendorQuote[]
+  selectedVendor     String?
+  selectedPrice      Decimal?        @db.Decimal(10, 2)
+  currentStageIndex  Int             @default(0)
+  stageStartTime     DateTime?
+  remindersSent      Int             @default(0)
+  status             RequestStatus   @default(PENDING)
+  createdById        String
+  createdBy          User            @relation("RequestCreator", fields: [createdById], references: [id])
+  approvalEvents     ApprovalEvent[]
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+
+  @@map("requests")
+}
+
+model VendorQuote {
+  id        String   @id @default(cuid())
+  requestId String
+  request   Request  @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  name      String
+  price     Decimal  @db.Decimal(10, 2)
+  email     String?
+  createdAt DateTime @default(now())
+
+  @@map("vendor_quotes")
+}
+
+model StageConfig {
+  id              String  @id @default(cuid())
+  order           Int
+  name            String
+  approverUserId  String?
+  approverUser    User?   @relation("StageApprover", fields: [approverUserId], references: [id])
+  assignedUsers   User[]  @relation("StageApproverAssignment")
+
+  @@unique([order])
+  @@map("stage_configs")
+}
+
+model PasswordResetToken {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String   @unique
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@map("password_reset_tokens")
+}
+
+model ApprovalEvent {
+  id        String   @id @default(cuid())
+  requestId String
+  request   Request  @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  actorId   String?
+  actor     User?    @relation("ApprovalActor", fields: [actorId], references: [id])
+  action    String
+  message   String
+  createdAt DateTime @default(now())
+
+  @@map("approval_events")
+}

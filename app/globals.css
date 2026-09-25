@@ -30,7 +30,7 @@ main {
 }
 
 .card {
-  background: #fff;
+  background: white;
   border: 1px solid #e2e8f0;
   border-radius: 16px;
   box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);

@@ -1,9 +1,9 @@
+import Link from "next/link";
 import { getServerSession } from "next-auth";
 import { redirect, notFound } from "next/navigation";
-import Link from "next/link";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { Role } from "@prisma/client";
+import { Role, RequestStatus } from "@prisma/client";
 
 export default async function RequestDetailPage({ params }: { params: { id: string } }) {
   const session = await getServerSession(authOptions);
@@ -11,16 +11,18 @@ export default async function RequestDetailPage({ params }: { params: { id: stri
 
   const request = await prisma.request.findUnique({
     where: { id: params.id },
-    include: { vendors: true, approvalEvents: { orderBy: { createdAt: "asc" } }, createdBy: true }
+    include: { vendors: true, approvalEvents: { orderBy: { createdAt: "asc" } }, createdBy: true },
   });
 
   if (!request) notFound();
 
-  const user = await prisma.user.findUnique({ where: { id: (session.user as any).id } });
-  const isAdmin = user?.role === Role.ADMIN;
-  const isRequester = request.createdById === user?.id;
+  const user = await prisma.user.findUnique({ where: { id: session.user.id as string } });
+  if (!user) redirect("/login");
+
   const currentStage = await prisma.stageConfig.findFirst({ where: { order: request.currentStageIndex } });
-  const canAct = isAdmin || (user?.role === Role.APPROVER && currentStage?.approverUserId === user.id && request.status === "PENDING");
+  const canAct =
+    user.role === Role.ADMIN ||
+    (user.role === Role.APPROVER && currentStage?.approverUserId === user.id && request.status === RequestStatus.PENDING);
 
   return (
     <main>
@@ -29,7 +31,12 @@ export default async function RequestDetailPage({ params }: { params: { id: stri
         <div className="nav-links">
           <Link href="/dashboard">Dashboard</Link>
           <Link href="/requests/new">New Request</Link>
-          {user?.role === Role.ADMIN ? <><Link href="/admin/users">Users</Link><Link href="/admin/stages">Stages</Link></> : null}
+          {user.role === Role.ADMIN ? (
+            <>
+              <Link href="/admin/users">Users</Link>
+              <Link href="/admin/stages">Stages</Link>
+            </>
+          ) : null}
           <form action="/api/auth/signout" method="POST"><button className="secondary" type="submit">Logout</button></form>
         </div>
       </div>
@@ -47,7 +54,7 @@ export default async function RequestDetailPage({ params }: { params: { id: stri
 
           <div className="grid" style={{ gridTemplateColumns: "repeat(3, minmax(180px, 1fr))" }}>
             <div><strong>Selected vendor:</strong><div>{request.selectedVendor ?? "—"}</div></div>
-            <div><strong>Selected price:</strong><div>{request.selectedPrice ? `$${request.selectedPrice.toFixed(2)}` : "—"}</div></div>
+            <div><strong>Selected price:</strong><div>{request.selectedPrice ? `$${Number(request.selectedPrice).toFixed(2)}` : "—"}</div></div>
             <div><strong>Stage index:</strong><div>{request.currentStageIndex + 1}</div></div>
           </div>
         </div>
@@ -62,7 +69,7 @@ export default async function RequestDetailPage({ params }: { params: { id: stri
               {request.vendors.map((vendor: any) => (
                 <tr key={vendor.id}>
                   <td>{vendor.name}</td>
-                  <td>${vendor.price.toFixed(2)}</td>
+                  <td>${Number(vendor.price).toFixed(2)}</td>
                   <td>{vendor.email ?? "—"}</td>
                 </tr>
               ))}
@@ -76,21 +83,21 @@ export default async function RequestDetailPage({ params }: { params: { id: stri
             <ul>
               {request.approvalEvents.map((event: any) => (
                 <li key={event.id}>
-                  <strong>{event.action ?? "System"}</strong> — {event.message} ({new Date(event.createdAt).toLocaleString()})
+                  <strong>{event.action}</strong> — {event.message} ({new Date(event.createdAt).toLocaleString()})
                 </li>
               ))}
             </ul>
           )}
         </div>
 
-        {isRequester || isAdmin ? (
+        {(user.role === Role.REQUESTER || user.role === Role.ADMIN) ? (
           <div className="card" style={{ padding: 20, marginBottom: 20 }}>
             <h3>Add a new vendor quote</h3>
             <form action={`/api/requests/${request.id}/vendors`} method="POST" className="form-grid">
               <div style={{ display: "grid", gridTemplateColumns: "1fr 180px 1fr", gap: 12 }}>
                 <input name="vendorName" placeholder="Vendor name" required />
                 <input name="vendorPrice" type="number" step="0.01" min="0" placeholder="Price" required />
-                <input name="vendorEmail" type="email" placeholder="Vendor email (optional)" />
+                <input name="vendorEmail" type="email" placeholder="Vendor email" />
               </div>
               <button type="submit" className="primary">Add vendor</button>
             </form>

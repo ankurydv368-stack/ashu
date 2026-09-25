@@ -9,11 +9,15 @@ export default async function AdminStagesPage() {
   const session = await getServerSession(authOptions);
   if (!session?.user) redirect("/login");
 
-  const currentUser = await prisma.user.findUnique({ where: { id: (session.user as any).id } });
+  const currentUser = await prisma.user.findUnique({ where: { id: session.user.id as string } });
   if (!currentUser || currentUser.role !== Role.ADMIN) redirect("/dashboard");
 
-  const stages = await prisma.stageConfig.findMany({ orderBy: { order: "asc" }, include: { approverUser: true } });
-  const users = await prisma.user.findMany({ where: { role: Role.APPROVER }, include: { assignedStage: true } });
+  const stages = await prisma.stageConfig.findMany({
+    orderBy: { order: "asc" },
+    include: { approverUser: true },
+  });
+
+  const approvers = await prisma.user.findMany({ where: { role: Role.APPROVER }, include: { assignedStage: true } });
 
   return (
     <main>
@@ -40,7 +44,7 @@ export default async function AdminStagesPage() {
                   <label>Approver</label>
                   <select name={`stages[${index}][approverUserId]`} defaultValue={stage.approverUserId ?? ""}>
                     <option value="">Unassigned</option>
-                    {users.map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}
+                    {approvers.map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}
                   </select>
                 </div>
               </div>

@@ -1,39 +1,42 @@
+import Link from "next/link";
 import { getServerSession } from "next-auth";
 import { redirect } from "next/navigation";
-import Link from "next/link";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { Role } from "@prisma/client";
+import { Role, RequestStatus } from "@prisma/client";
 
 export default async function DashboardPage() {
   const session = await getServerSession(authOptions);
   if (!session?.user) redirect("/login");
 
-  const currentUser = await prisma.user.findUnique({ where: { id: (session.user as any).id }, include: { assignedStage: true } });
-  const isAdmin = currentUser?.role === Role.ADMIN;
-  const isApprover = currentUser?.role === Role.APPROVER;
+  const currentUser = await prisma.user.findUnique({
+    where: { id: session.user.id as string },
+    include: { assignedStage: true },
+  });
+
+  if (!currentUser) redirect("/login");
 
   let requests: any[] = [];
 
-  if (isAdmin) {
+  if (currentUser.role === Role.ADMIN) {
     requests = await prisma.request.findMany({
       orderBy: { createdAt: "desc" },
-      include: { vendors: true, createdBy: true }
+      include: { vendors: true },
     });
-  } else if (isApprover) {
+  } else if (currentUser.role === Role.APPROVER) {
     requests = await prisma.request.findMany({
       where: {
-        status: "PENDING",
-        currentStageIndex: currentUser.assignedStage?.order ?? -1
+        status: RequestStatus.PENDING,
+        currentStageIndex: currentUser.assignedStage?.order ?? -1,
       },
       orderBy: { createdAt: "desc" },
-      include: { vendors: true }
+      include: { vendors: true },
     });
   } else {
     requests = await prisma.request.findMany({
-      where: { createdById: currentUser!.id },
+      where: { createdById: currentUser.id },
       orderBy: { createdAt: "desc" },
-      include: { vendors: true }
+      include: { vendors: true },
     });
   }
 
@@ -44,7 +47,12 @@ export default async function DashboardPage() {
         <div className="nav-links">
           <Link href="/dashboard">Dashboard</Link>
           <Link href="/requests/new">New Request</Link>
-          {isAdmin ? <><Link href="/admin/users">Users</Link><Link href="/admin/stages">Stages</Link></> : null}
+          {currentUser.role === Role.ADMIN ? (
+            <>
+              <Link href="/admin/users">Users</Link>
+              <Link href="/admin/stages">Stages</Link>
+            </>
+          ) : null}
           <form action="/api/auth/signout" method="POST"><button className="secondary" type="submit">Logout</button></form>
         </div>
       </div>
@@ -55,9 +63,9 @@ export default async function DashboardPage() {
           <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 16 }}>
             <div>
               <div className="muted">Logged in as</div>
-              <strong>{currentUser?.name}</strong>
+              <strong>{currentUser.name}</strong>
             </div>
-            <div className="badge">{currentUser?.role}</div>
+            <div className="badge">{currentUser.role}</div>
           </div>
 
           <table className="table">

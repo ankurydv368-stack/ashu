@@ -4,7 +4,7 @@ import { Providers } from "@/components/providers";
 
 export const metadata: Metadata = {
   title: "Quotation Approval System",
-  description: "Multi-department quotation approval and vendor selection workflow"
+  description: "Multi-department quotation approval and vendor selection workflow",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

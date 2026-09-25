@@ -9,10 +9,14 @@ export default async function AdminUsersPage() {
   const session = await getServerSession(authOptions);
   if (!session?.user) redirect("/login");
 
-  const currentUser = await prisma.user.findUnique({ where: { id: (session.user as any).id } });
+  const currentUser = await prisma.user.findUnique({ where: { id: session.user.id as string } });
   if (!currentUser || currentUser.role !== Role.ADMIN) redirect("/dashboard");
 
-  const users = await prisma.user.findMany({ orderBy: { createdAt: "desc" }, include: { assignedStage: true, createdByAdmin: true } });
+  const users = await prisma.user.findMany({
+    orderBy: { createdAt: "desc" },
+    include: { assignedStage: true },
+  });
+
   const stages = await prisma.stageConfig.findMany({ orderBy: { order: "asc" } });
 
   return (
